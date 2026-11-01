@@ -650,6 +650,7 @@
     g.beginPath(); g.moveTo(110, 540); g.lineTo(640, 540); g.stroke();
     g.restore();
     SC.comicText(g, '在陨落之前，点亮一整页星图', 110, 592, { size: 30, color: C.sub, outline: false, ghost: false });
+    SC.comicText(g, '躲开墨陨 · 收集星点 · 集满七颗连成星座', 110, 636, { size: 21, color: C.accent2, outline: false, ghost: false });
 
     /* start button: printed panel, not a burst blob */
     var pulse = 1 + Math.sin(t * 3.2) * 0.02;
@@ -890,7 +891,7 @@
       return;
     }
     raf = requestAnimationFrame(frame);
-    global.__SC = { G: function () { return G; }, render: render, startGame: startGame, step: step, setState: function (s) { G.state = s; } };
+    global.__SC = { G: function () { return G; }, render: render, startGame: startGame, step: step, setState: function (s) { G.state = s; }, damage: function () { G.ship.invuln = 0; hitShip(); } };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
