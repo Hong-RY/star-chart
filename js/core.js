@@ -214,14 +214,9 @@
   SC.panel = function (ctx, x, y, w, h, opt) {
     opt = opt || {};
     ctx.save();
-    /* shadow plate */
-    ctx.fillStyle = halftonePattern(ctx, SC.C.ink, 0.42, 10);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x + (opt.sx == null ? 10 : opt.sx), y + (opt.sy == null ? 10 : opt.sy), w, h);
-    ctx.clip();
-    ctx.fillRect(x + 10, y + 10, w + 40, h + 40);
-    ctx.restore();
+    /* hard ink shadow, the way a printed card sits on the page */
+    ctx.fillStyle = opt.shadow || SC.C.ink;
+    ctx.fillRect(x + (opt.sx == null ? 8 : opt.sx), y + (opt.sy == null ? 8 : opt.sy), w, h);
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.fillStyle = opt.fill || SC.C.surface;

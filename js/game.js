@@ -273,7 +273,7 @@
 
     /* engraved astrolabe, very low contrast, gives the page a centre of gravity */
     g.save();
-    g.strokeStyle = 'rgba(110,101,82,0.16)';
+    g.strokeStyle = 'rgba(110,101,82,0.30)';
     g.lineWidth = 2;
     g.beginPath(); g.arc(W / 2, H * 0.54, 330, 0, SC.TAU); g.stroke();
     g.beginPath(); g.arc(W / 2, H * 0.54, 300, 0, SC.TAU); g.stroke();
@@ -360,7 +360,7 @@
 
       /* burning trail always points straight up, independent of the splat's spin */
       g.save();
-      g.fillStyle = 'rgba(216,64,46,0.13)';
+      g.fillStyle = 'rgba(110,101,82,0.12)';
       g.beginPath();
       g.moveTo(-r.r * 0.5, 0);
       g.quadraticCurveTo(-r.r * 0.18, -r.r * 1.7, r.r * 0.06, -r.r * 2.3);
@@ -368,7 +368,7 @@
       g.closePath();
       g.fill();
       g.globalAlpha = 0.55;
-      g.fillStyle = SC.halftone(g, C.accent, 0.5, 9);
+      g.fillStyle = SC.halftone(g, C.sub, 0.45, 9);
       g.fill();
       g.restore();
 
@@ -379,7 +379,7 @@
       g.save();
       SC.path(g, pts); g.clip();
       g.globalAlpha = 0.75;
-      g.fillStyle = SC.halftone(g, C.accent, 0.5, 8);
+      g.fillStyle = SC.halftone(g, C.sub, 0.55, 8);
       g.beginPath();
       g.arc(-r.r * 0.42, -r.r * 0.46, r.r * 0.72, 0, SC.TAU);
       g.fill();
@@ -452,13 +452,18 @@
       g.restore();
     }
 
-    /* dart body */
+    /* dart body: white card stock with a paper halo so it never sinks into the page */
     var body = [[0, -46], [15, -6], [26, 20], [8, 13], [0, 26], [-8, 13], [-26, 20], [-15, -6]];
-    SC.printShape(g, body, { fill: C.surface, lw: 5, shade: { color: C.sub, density: 0.14, dx: 4, dy: 5 } });
+    g.save();
+    SC.path(g, body);
+    g.fillStyle = C.bg; g.fill();
+    g.lineWidth = 15; g.strokeStyle = C.bg; g.lineJoin = 'round'; g.stroke();
+    g.restore();
+    SC.printShape(g, body, { fill: '#FFFFFF', lw: 6, shade: { color: C.sub, density: 0.12, dx: 4, dy: 5 } });
 
     /* red nose + red wing edges */
     g.beginPath(); g.moveTo(0, -46); g.lineTo(9, -20); g.lineTo(-9, -20); g.closePath();
-    g.fillStyle = C.accent; g.fill(); g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
+    g.fillStyle = C.accent2; g.fill(); g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
 
     g.save();
     g.globalAlpha = 0.9;
@@ -530,15 +535,19 @@
   }
 
   function drawHUD(g) {
-    /* caption */
-    SC.panel(g, 64, 56, 372, 96, { sx: 8, sy: 8, lw: 5 });
+    /* caption: width follows the text so the right edge is not hollow */
+    g.save();
+    g.font = SC.font(32, 900);
+    var capW = Math.max(300, g.measureText('星图 · 第 ' + G.wave + ' 波').width + 56);
+    g.restore();
+    SC.panel(g, 64, 56, capW, 96, { sx: 8, sy: 8, lw: 5 });
     SC.comicText(g, '星图 · 第 ' + G.wave + ' 波', 88, 104, { size: 32, color: C.ink, lineWidth: 0, ghost: false });
-    SC.comicText(g, 'STAR CHART / 第一话', 88, 136, { size: 17, color: C.sub, lineWidth: 0, ghost: false });
+    SC.comicText(g, 'STAR CHART / 第一话', 88, 136, { size: 18, color: C.sub, lineWidth: 0, ghost: false });
 
     /* score */
     SC.panel(g, W - 470, 56, 406, 136, { sx: -8, sy: 8, lw: 5 });
     SC.comicText(g, 'SCORE', W - 100, 94, { size: 22, color: C.sub, align: 'right', ghost: false, lineWidth: 0 });
-    SC.comicText(g, String(Math.round(G.shownScore)).padStart(6, '0'), W - 96, 166, { size: 78, color: C.ink, align: 'right', lineWidth: 0 });
+    SC.comicText(g, String(Math.round(G.shownScore)), W - 96, 166, { size: 78, color: C.ink, align: 'right', lineWidth: 0 });
 
     /* combo chip */
     if (G.combo >= 2) {
@@ -548,8 +557,8 @@
       g.translate(cx + 150, cy + 32);
       g.scale(cs, cs);
       g.translate(-(cx + 150), -(cy + 32));
-      SC.panel(g, cx, cy, 300, 64, { lw: 5, fill: C.accent, sx: 6, sy: 6 });
-      SC.comicText(g, '×' + mult() + ' 连击', cx + 150, cy + 44, { size: 32, color: C.surface, align: 'center', lineWidth: 0, ghost: false });
+      SC.panel(g, cx, cy, 406, 64, { lw: 5, fill: C.accent, sx: 6, sy: 6 });
+      SC.comicText(g, '×' + mult() + ' 连击', cx + 203, cy + 44, { size: 32, color: C.surface, align: 'center', lineWidth: 0, ghost: false });
       g.restore();
     }
 
@@ -565,7 +574,7 @@
       g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
       g.restore();
     }
-    SC.comicText(g, '生命', 84, 1042, { size: 17, color: C.sub, outline: false, ghost: false });
+    SC.comicText(g, '生命', 84, 1022, { size: 18, color: C.sub, outline: false, ghost: false });
 
     /* slow meter */
     var mx = W / 2 - 240, my = 966, mw = 480, mh = 40;
@@ -576,11 +585,11 @@
     g.fillStyle = SC.halftone(g, C.accent2, G.slow.active ? 0.62 : 0.4, 10);
     g.fillRect(mx, my, mw, mh);
     g.restore();
-    SC.comicText(g, '缓速  空格', mx + mw / 2, my - 14, { size: 20, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
+    SC.comicText(g, '空格 缓速', mx + mw / 2, my - 14, { size: 21, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
     if (G.slow.lock > 0) SC.comicText(g, '过热', mx + mw / 2, my + 30, { size: 18, color: C.accent, align: 'center', outline: false, ghost: false });
 
     /* best */
-    SC.comicText(g, '最高 ' + G.best, W - 92, 1036, { size: 20, color: C.sub, align: 'right', lineWidth: 0, ghost: false });
+    SC.comicText(g, '最高 ' + G.best, W - 92, 1020, { size: 22, color: C.sub, align: 'right', lineWidth: 0, ghost: false });
   }
 
   function drawBanner(g) {
@@ -590,12 +599,12 @@
     var inP = SC.clamp(k / 0.16, 0, 1), outP = SC.clamp((k - 0.78) / 0.22, 0, 1);
     var bx = -260 + (W / 2 + 260) * SC.expoOut(inP) + outP * 1500;
     g.save();
-    g.translate(bx, 180);
-    SC.panel(g, -260, 0, 520, 140, { sx: 10, sy: 10, lw: 6 });
+    g.translate(bx, 150);
+    SC.panel(g, -260, 0, 520, 118, { sx: 10, sy: 10, lw: 6 });
     g.fillStyle = C.accent;
-    g.fillRect(-260, 0, 14, 140);
-    SC.comicText(g, b.text, -218, 78, { size: 58, color: C.ink, lineWidth: 0 });
-    SC.comicText(g, b.sub, -216, 118, { size: 24, color: C.accent, outline: false, ghost: false });
+    g.fillRect(-260, 0, 14, 118);
+    SC.comicText(g, b.text, -216, 68, { size: 52, color: C.ink, lineWidth: 0 });
+    SC.comicText(g, b.sub, -214, 102, { size: 22, color: C.accent, outline: false, ghost: false });
     g.restore();
   }
 
@@ -629,14 +638,14 @@
     /* constellation engraving, upper right */
     g.save();
     g.strokeStyle = C.accent2; g.lineWidth = 4; g.lineCap = 'round';
-    var cp = [[1318, 276], [1436, 232], [1552, 306], [1490, 410], [1362, 386], [1318, 276]];
+    var cp = [[1163, 263], [1316, 206], [1467, 302], [1387, 437], [1220, 406], [1163, 263]];
     g.beginPath();
     cp.forEach(function (p, i) { i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); });
     g.stroke();
     cp.forEach(function (p) { g.beginPath(); g.arc(p[0], p[1], 7, 0, SC.TAU); g.fillStyle = C.accent2; g.fill(); g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke(); g.lineWidth = 4; });
     g.restore();
     for (var k = 0; k < 7; k++) {
-      SC.star4(g, 1480 + Math.sin(k * 2.3) * 250, 300 + Math.cos(k * 1.9) * 190, 8 + (k % 3) * 3, t * 0.2 + k, C.accent, 3);
+      SC.star4(g, 1310 + Math.sin(k * 2.3) * 240, 320 + Math.cos(k * 1.9) * 180, 8 + (k % 3) * 3, t * 0.2 + k, C.accent, 3);
     }
 
     /* caption panel */
@@ -660,9 +669,9 @@
     g.scale(pulse, pulse);
     g.translate(-(104 + 250), -(700 + 52));
     SC.panel(g, 104, 700, 500, 104, { lw: 6, fill: C.accent });
-    SC.comicText(g, '点击开始', 354, 768, { size: 46, color: C.surface, align: 'center', lineWidth: 5 });
+    SC.comicText(g, '点击开始', 354, 772, { size: 56, color: C.surface, align: 'center', lineWidth: 2 });
     g.restore();
-    SC.comicText(g, '鼠标 / 触屏移动　空格 缓速　M 静音　P 暂停', 108, 858, { size: 21, color: C.sub, outline: false, ghost: false });
+    SC.comicText(g, '鼠标 / 触屏移动　空格 缓速　M 静音　P 暂停', 108, 866, { size: 22, color: C.sub, outline: false, ghost: false });
 
     /* best */
     if (G.best > 0) {
@@ -681,9 +690,6 @@
     g.globalAlpha = 0.78;
     g.fillStyle = C.bg;
     g.fillRect(0, 0, W, H);
-    g.globalAlpha = 0.12;
-    g.fillStyle = SC.halftone(g, C.ink, 0.3, 12);
-    g.fillRect(0, 0, W, H);
     g.restore();
 
     var pw = 900, ph = 540, px = (W - pw) / 2, py = (H - ph) / 2 - 10;
@@ -691,10 +697,12 @@
     /* corner marks inside the panel */
     g.save();
     g.strokeStyle = C.accent; g.lineWidth = 6;
-    g.beginPath(); g.moveTo(px + 34, py + 34); g.lineTo(px + 90, py + 34); g.stroke();
-    g.beginPath(); g.moveTo(px + 34, py + 34); g.lineTo(px + 34, py + 90); g.stroke();
-    g.beginPath(); g.moveTo(px + pw - 34, py + ph - 34); g.lineTo(px + pw - 90, py + ph - 34); g.stroke();
-    g.beginPath(); g.moveTo(px + pw - 34, py + ph - 34); g.lineTo(px + pw - 34, py + ph - 90); g.stroke();
+    var cm = 30, cg = 56;
+    [[px + cm, py + cm, 1, 1], [px + pw - cm, py + cm, -1, 1], [px + cm, py + ph - cm, 1, -1], [px + pw - cm, py + ph - cm, -1, -1]].forEach(function (c) {
+      g.beginPath();
+      g.moveTo(c[0] + c[2] * cg, c[1]); g.lineTo(c[0], c[1]); g.lineTo(c[0], c[1] + c[3] * cg);
+      g.stroke();
+    });
     g.restore();
 
     SC.comicText(g, '本话完', W / 2, py + 150, { size: 104, color: C.ink, align: 'center', lineWidth: 6 });
@@ -706,9 +714,9 @@
     g.restore();
 
     SC.comicText(g, '得分', px + 230, py + 300, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
-    SC.comicText(g, String(G.score), px + 230, py + 380, { size: 82, color: C.accent, align: 'center', lineWidth: 5 });
+    SC.comicText(g, String(G.score), px + 230, py + 380, { size: 82, color: C.accent, align: 'center', lineWidth: 0 });
     SC.comicText(g, '最高', px + pw - 230, py + 300, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
-    SC.comicText(g, String(G.best), px + pw - 230, py + 380, { size: 82, color: C.ink, align: 'center', lineWidth: 5 });
+    SC.comicText(g, String(G.best), px + pw - 230, py + 380, { size: 82, color: C.ink, align: 'center', lineWidth: 0 });
 
     var pulse = 1 + Math.sin(G.t * 3.2) * 0.03;
     g.save();
@@ -746,6 +754,7 @@
     drawPaper(ctx);
     if (G.state !== 'title') drawChart(ctx);
     if (G.state === 'title') {
+      drawFrame(ctx);
       drawTitle(ctx);
     } else {
       drawStars(ctx);
@@ -753,12 +762,12 @@
       drawParts(ctx);
       drawShip(ctx);
       drawPops(ctx);
+      drawFrame(ctx);
       if (G.state !== 'over') { drawHUD(ctx); drawBanner(ctx); }
       if (G.state === 'over') drawOver(ctx);
       if (G.paused) drawPause(ctx);
     }
     drawSlowOverlay(ctx);
-    drawFrame(ctx);
     ctx.restore();
   }
 
