@@ -367,8 +367,8 @@
       g.quadraticCurveTo(r.r * 0.26, -r.r * 1.1, r.r * 0.5, 0);
       g.closePath();
       g.fill();
-      g.globalAlpha = 0.55;
-      g.fillStyle = SC.halftone(g, C.sub, 0.45, 9);
+      g.globalAlpha = 0.35;
+      g.fillStyle = SC.halftone(g, C.bg, 0.45, 9);
       g.fill();
       g.restore();
 
@@ -378,8 +378,8 @@
       /* directional red halftone crescent instead of an all-over dot pattern */
       g.save();
       SC.path(g, pts); g.clip();
-      g.globalAlpha = 0.75;
-      g.fillStyle = SC.halftone(g, C.sub, 0.55, 8);
+      g.globalAlpha = 0.5;
+      g.fillStyle = SC.halftone(g, C.bg, 0.55, 8);
       g.beginPath();
       g.arc(-r.r * 0.42, -r.r * 0.46, r.r * 0.72, 0, SC.TAU);
       g.fill();
