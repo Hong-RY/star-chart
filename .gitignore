@@ -1,0 +1,6 @@
+node_modules/
+.chrome*/
+.vscode/
+.DS_Store
+Thumbs.db
+shots/live.png
