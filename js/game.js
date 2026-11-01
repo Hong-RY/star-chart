@@ -169,6 +169,14 @@
 
     var sdt = dt * G.timeScale;
 
+    /* keyboard steering moves the spring target */
+    var kdx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    var kdy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    if (kdx || kdy) {
+      G.target.x = SC.clamp(G.target.x + kdx * 1100 * dt, 90, W - 90);
+      G.target.y = SC.clamp(G.target.y + kdy * 1100 * dt, 170, H - 120);
+    }
+
     /* ship spring */
     var sk = 150, sd = 19, s = G.ship;
     var ax = (G.target.x - s.x) * sk - s.vx * sd;
@@ -564,7 +572,7 @@
     var e = G.slow.energy;
     g.save();
     g.beginPath(); g.rect(mx + 6, my + 6, (mw - 12) * e, mh - 12); g.clip();
-    g.fillStyle = SC.halftone(g, G.slow.active ? C.accent : C.accent2, 0.55, 10);
+    g.fillStyle = SC.halftone(g, C.accent2, G.slow.active ? 0.62 : 0.4, 10);
     g.fillRect(mx, my, mw, mh);
     g.restore();
     SC.comicText(g, '缓速  空格', mx + mw / 2, my - 14, { size: 20, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
@@ -592,12 +600,16 @@
 
   function drawSlowOverlay(g) {
     if (G.timeScale > 0.85) return;
-    var a = (1 - G.timeScale / 1) * 0.16;
+    var k = (1 - G.timeScale) / 0.65;
     g.save();
-    g.globalAlpha = a;
-    g.fillStyle = SC.halftone(g, C.accent2, 0.34, 16);
+    g.fillStyle = 'rgba(29,78,137,' + (0.10 * k).toFixed(3) + ')';
     g.fillRect(0, 0, W, H);
+    /* blue print registration frame, like a frozen film cell */
+    g.globalAlpha = 0.5 * k;
+    g.strokeStyle = C.accent2; g.lineWidth = 10;
+    g.strokeRect(18, 18, W - 36, H - 36);
     g.restore();
+    SC.comicText(g, '缓 速', W - 108, 700, { size: 30, color: C.accent2, align: 'right', lineWidth: 0, ghost: false });
   }
 
   /* ---------------- screens ---------------- */
@@ -763,6 +775,9 @@
   function toLogical(clientX, clientY) {
     return { x: (clientX - view.ox) / view.scale, y: (clientY - view.oy) / view.scale };
   }
+  var keys = { left: false, right: false, up: false, down: false };
+  var pointers = {};
+
   function bindInput() {
     canvas.addEventListener('pointermove', function (e) {
       if (G.state !== 'play') return;
@@ -771,13 +786,21 @@
     }, { passive: true });
     canvas.addEventListener('pointerdown', function (e) {
       SC.Audio.resume();
+      pointers[e.pointerId] = true;
+      if (Object.keys(pointers).length >= 2 && G.state === 'play') G.slow.active = true;
       if (e.button === 2) { if (G.state === 'play') G.slow.active = true; return; }
       if (G.state === 'title' || G.state === 'over') { startGame(); return; }
       if (G.state === 'play') { var p = toLogical(e.clientX, e.clientY); G.target.x = p.x; G.target.y = p.y; }
     });
     canvas.addEventListener('pointerup', function (e) {
+      delete pointers[e.pointerId];
+      if (Object.keys(pointers).length < 2 && G.state === 'play' && G.timeScale < 0.85) G.slow.active = false;
       if (e.button === 2) G.slow.active = false;
-    });
+    }, { passive: true });
+    canvas.addEventListener('pointercancel', function (e) {
+      delete pointers[e.pointerId];
+      G.slow.active = false;
+    }, { passive: true });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     global.addEventListener('blur', function () { G.paused = true; G.slow.active = false; });
     global.addEventListener('keydown', function (e) {
@@ -789,14 +812,18 @@
       if (e.code === 'KeyP' && G.state === 'play') G.paused = !G.paused;
       if (e.code === 'KeyM') { SC.Audio.setMuted(!SC.Audio.muted); }
       if (e.code === 'KeyR' && G.state !== 'title') startGame();
-      var kx = 0, ky = 0;
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') kx = -1;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') kx = 1;
-      if (e.code === 'ArrowUp' || e.code === 'KeyW') ky = -1;
-      if (e.code === 'ArrowDown' || e.code === 'KeyS') ky = 1;
-      if (kx || ky) { G.target.x = SC.clamp(G.target.x + kx * 90, 80, W - 80); G.target.y = SC.clamp(G.target.y + ky * 90, 160, H - 120); }
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = true;
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
     });
-    global.addEventListener('keyup', function (e) { if (e.code === 'Space') G.slow.active = false; });
+    global.addEventListener('keyup', function (e) {
+      if (e.code === 'Space') G.slow.active = false;
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false;
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
+    });
   }
 
   /* ---------------- shots (deterministic screenshots for QA) ---------------- */
