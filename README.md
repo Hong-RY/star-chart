@@ -4,6 +4,8 @@
 
 **在线试玩：** https://hong-ry.github.io/star-chart/
 
+![实际游戏画面](docs/demo.gif)
+
 ![标题页](docs/title.png)
 
 ![游戏画面](docs/play.png)

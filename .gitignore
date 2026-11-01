@@ -5,3 +5,5 @@ node_modules/
 Thumbs.db
 shots/live.png
 .review/
+shots/_frames/
+shots/_gif*.py
