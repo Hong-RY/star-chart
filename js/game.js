@@ -24,7 +24,7 @@
       stars: [], rocks: [], parts: [], pops: [],
       constIdx: 0, next: 0, done: [], card: null, cardT: 0,
       shields: 0, damageThis: false,
-      pickups: [], effects: { magnet: 0, freeze: 0, phase: 0 },
+      pickups: [], effects: { spread: 0, freeze: 0, phase: 0 }, bullets: [], firing: false, fireCd: 0,
       tide: null, boss: null, gallery: false,
       mode: 'story', loop: 0,
       unlocked: (function () { try { var raw = localStorage.getItem('starchart.unlocked'); var arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr) ? arr : []; } catch (e) { return []; } })(),
@@ -144,14 +144,14 @@
     try { localStorage.setItem('starchart.unlocked', JSON.stringify(G.unlocked)); } catch (e) {}
   }
 
-  var PICKUP_TYPES = ['magnet', 'freeze', 'phase'];
+  var PICKUP_TYPES = ['spread', 'freeze', 'phase'];
   function spawnPickup() {
     G.pickups.push({ x: rand(300, W - 300), y: rand(300, 820), phase: Math.random() * SC.TAU, type: PICKUP_TYPES[G.pickups.length % 3] });
   }
   function collectPickup(i) {
     var p = G.pickups[i];
     G.pickups.splice(i, 1);
-    if (p.type === 'magnet') { G.effects.magnet = 8; popup(p.x, p.y - 30, '磁吸 8s', 34, C.accent2); }
+    if (p.type === 'spread') { G.effects.spread = 8; popup(p.x, p.y - 30, '散射 8s', 34, C.accent2); }
     if (p.type === 'freeze') { G.effects.freeze = 3; popup(p.x, p.y - 30, '时停 3s', 34, C.accent2); }
     if (p.type === 'phase') { G.effects.phase = 5; popup(p.x, p.y - 30, '穿透 5s', 34, C.accent2); }
     burst(p.x, p.y, 16, [C.accent2, C.ink, C.surface], 320, 0.6);
@@ -163,8 +163,72 @@
     banner('墨潮', '躲进安全圈');
     SC.Audio.wave();
   }
+  function bossSeg(idx) {
+    var p = G.boss && G.boss.path;
+    if (!p || !p.length) return { x: G.boss ? (G.boss.x || 0) : 0, y: G.boss ? (G.boss.y || 0) : 0 };
+    return p[Math.min(idx, p.length - 1)];
+  }
+
+  function takeWeak(i) {
+    var wk = G.boss.weak[i];
+    if (wk.taken) return;
+    wk.hp = (wk.hp == null ? 2 : wk.hp) - 1;
+    G.boss.flash = 0.15;
+    var p0 = bossSeg(12 + i * 14);
+    burst(p0.x, p0.y, 8, [C.accent, C.surface], 300, 0.45);
+    SC.Audio.bossHit();
+    if (wk.hp > 0) return;
+    wk.taken = true;
+    G.boss.hp--;
+    G.boss.flash = 0.18;
+    var p = bossSeg(12 + i * 14);
+    G.score += 60;
+    burst(p.x, p.y, 20, [C.accent, C.ink, C.surface], 460, 0.65);
+    popup(p.x, p.y - 40, '弱点 +60', 30, C.accent);
+    SC.Audio.bossHit();
+    SC.Audio.explode(true);
+    if (G.boss.hp <= 0) {
+      G.shields = Math.min(2, G.shields + 1);
+      G.score += 200;
+      popup(W / 2, H * 0.36, '墨龙退散', 88, C.surface, true);
+      burst(W / 2, 380, 34, [C.ink, C.accent], 540, 0.9);
+      SC.Audio.clear();
+      SC.Audio.explode(true);
+      G.boss = null;
+    }
+  }
+
+  function fireBullet() {
+    var s = G.ship;
+    var target = null, best = 1e9, i;
+    /* during a boss fight the weak points take priority over meteors */
+    if (G.boss) {
+      for (var wi = 0; wi < G.boss.weak.length; wi++) {
+        if (G.boss.weak[wi].taken) continue;
+        var wp = bossSeg(12 + wi * 14);
+        var dd = SC.dist2(s.x, s.y, wp.x, wp.y);
+        if (dd < best) { best = dd; target = wp; }
+      }
+      if (target) { best = -1; }
+    }
+    if (!target) {
+      for (i = 0; i < G.rocks.length; i++) {
+        var rd = SC.dist2(s.x, s.y, G.rocks[i].x, G.rocks[i].y);
+        if (rd < best) { best = rd; target = G.rocks[i]; }
+      }
+    }
+    if (target && best > 900 * 900) target = null;
+    var ang = target ? Math.atan2(target.y - s.y, target.x - s.x) : -Math.PI / 2;
+    var n = G.effects.spread > 0 ? 3 : 1;
+    for (var k = 0; k < n; k++) {
+      var a2 = ang + (k - (n - 1) / 2) * 0.13;
+      G.bullets.push({ x: s.x + Math.cos(a2) * 30, y: s.y + Math.sin(a2) * 30, vx: Math.cos(a2) * 1250, vy: Math.sin(a2) * 1250, life: 1.1 });
+    }
+    SC.Audio.attack();
+  }
+
   function startBoss() {
-    G.boss = { t: 0, dur: 18, hp: 3, maxHp: 3, weak: [], flash: 0 };
+    G.boss = { t: 0, dur: 26, hp: 3, maxHp: 3, weak: [], flash: 0, x: null, y: null, path: [], phase: 'chase', phaseT: 0 };
     for (var i = 0; i < 3; i++) G.boss.weak.push({ taken: false, at: (i * 0.3 + 0.25) });
     banner('墨龙', '靠近赤色弱点');
     SC.Audio.wave();
@@ -308,15 +372,6 @@
       if (SC.dist2(s.x, s.y, pk.x, pk.y) < Math.pow(44, 2)) collectPickup(pi);
     }
 
-    /* magnet pulls the next star toward the comet */
-    if (G.effects.magnet > 0) {
-      var mag = G.stars[G.next];
-      if (mag) {
-        mag.x += (s.x - mag.x) * Math.min(1, dt * 1.8);
-        mag.y += (s.y - mag.y) * Math.min(1, dt * 1.8);
-      }
-    }
-
     /* ink tide: dense rain, a safe circle dissolves meteors */
     if (G.tide) {
       G.tide.t += dt;
@@ -332,45 +387,106 @@
       }
     }
 
-    /* boss: the ink dragon sweeps across the page */
+    /* boss: the ink dragon hunts the comet */
     if (G.boss) {
-      G.boss.t += dt;
-      if (G.boss.flash > 0) G.boss.flash -= dt;
-      var bt = G.boss.t / G.boss.dur;
-      if (bt >= 1) { G.boss = null; }
+      var b = G.boss;
+      b.t += dt;
+      if (b.flash > 0) b.flash -= dt;
+      b.phaseT += dt;
+      if (b.phase === 'chase' && b.phaseT > 4.2) { b.phase = 'exposed'; b.phaseT = 0; }
+      else if (b.phase === 'exposed' && b.phaseT > 3) { b.phase = 'chase'; b.phaseT = 0; }
+      if (b.t >= b.dur) { G.boss = null; }
       else {
-        var headX = -320 + (W + 640) * bt;
-        var headY = 330 + Math.sin(G.boss.t * 1.5) * 130;
-        /* weak points ride on the body */
-        for (var wi = 0; wi < G.boss.weak.length; wi++) {
-          var wk = G.boss.weak[wi];
-          if (wk.taken) continue;
-          var wx = headX - 90 - wi * 95;
-          var wy = 330 + Math.sin((G.boss.t - (wi + 1) * 0.22) * 1.5) * 130;
-          if (SC.dist2(s.x, s.y, wx, wy) < Math.pow(46, 2)) {
-            wk.taken = true; G.boss.hp--;
-            G.score += 60;
-            burst(wx, wy, 18, [C.accent, C.ink, C.surface], 420, 0.6);
-            popup(wx, wy - 40, '弱点 +60', 30, C.accent);
-            SC.Audio.combo(10);
-            if (G.boss.hp <= 0) {
-              G.shields = Math.min(2, G.shields + 1);
-              G.score += 200;
-              popup(W / 2, H * 0.36, '墨龙退散', 88, C.surface, true);
-              burst(W / 2, 380, 30, [C.ink, C.accent], 520, 0.8);
-              SC.Audio.clear();
-              G.boss = null;
-            }
-          }
+        if (b.x == null) { b.x = 280; b.y = 380; }
+        var bdx = s.x - b.x, bdy = s.y - b.y, bl = Math.sqrt(bdx * bdx + bdy * bdy) || 1;
+        var bsp = (b.phase === 'exposed' ? 40 : 140 + Math.min(G.wave, 12) * 10);
+        var keep = 210;
+        var dir = b.phase === 'exposed' ? 0.12 : (bl > keep ? 1 : (bl < keep - 40 ? -0.7 : 0));
+        b.x += (bdx / bl) * bsp * dt * dir;
+        b.y += (bdy / bl) * bsp * dt * dir;
+        b.x = SC.clamp(b.x, 120, W - 120);
+        b.y = SC.clamp(b.y, 230, H - 170);
+        if (!b.path.length || SC.dist2(b.x, b.y, b.path[0].x, b.path[0].y) > 100) {
+          b.path.unshift({ x: b.x, y: b.y });
+          if (b.path.length > 260) b.path.pop();
         }
-        /* body contact hurts */
+        for (var wi = 0; wi < b.weak.length; wi++) {
+          if (b.weak[wi].taken) continue;
+          var wsp = bossSeg(12 + wi * 14);
+          if (b.phase === 'exposed' && SC.dist2(s.x, s.y, wsp.x, wsp.y) < Math.pow(46, 2)) takeWeak(wi);
+        }
         if (G.boss && s.invuln <= 0 && G.effects.phase <= 0) {
-          for (var bi = 0; bi < 7; bi++) {
-            var bx = headX - 60 - bi * 64;
-            var by = 330 + Math.sin((G.boss.t - (bi + 1) * 0.18) * 1.5) * 130;
-            if (SC.dist2(s.x, s.y, bx, by) < Math.pow(46, 2)) { hitShip(); break; }
+          for (var bc = 0; bc < 10; bc++) {
+            var bsp2 = bossSeg(bc * 6);
+            if (SC.dist2(s.x, s.y, bsp2.x, bsp2.y) < Math.pow(44, 2)) { hitShip(); break; }
           }
         }
+      }
+    }
+
+    /* bullets: auto-aimed at the nearest meteor or weak point */
+    if (G.firing) {
+      G.fireCd -= dt;
+      if (G.fireCd <= 0) { fireBullet(); G.fireCd = G.effects.spread > 0 ? 0.17 : 0.21; }
+    }
+    for (var bu = G.bullets.length - 1; bu >= 0; bu--) {
+      var bul = G.bullets[bu];
+      bul.x += bul.vx * sdt;
+      bul.y += bul.vy * sdt;
+      bul.life -= dt;
+      if (bul.life <= 0 || bul.x < -40 || bul.x > W + 40 || bul.y < -40 || bul.y > H + 40) { G.bullets.splice(bu, 1); continue; }
+      /* gentle homing on the dragon's weak points */
+      if (G.boss) {
+        var hw = null, hd = 1e9;
+        for (var hwi = 0; hwi < G.boss.weak.length; hwi++) {
+          if (G.boss.weak[hwi].taken) continue;
+          var hwp = bossSeg(12 + hwi * 14);
+          var hdist = SC.dist2(bul.x, bul.y, hwp.x, hwp.y);
+          if (hdist < hd) { hd = hdist; hw = hwp; }
+        }
+        if (hw) {
+          var ca = Math.atan2(bul.vy, bul.vx), ta = Math.atan2(hw.y - bul.y, hw.x - bul.x);
+          var da = Math.atan2(Math.sin(ta - ca), Math.cos(ta - ca));
+          ca += SC.clamp(da, -6 * dt, 6 * dt);
+          var spd = Math.sqrt(bul.vx * bul.vx + bul.vy * bul.vy);
+          bul.vx = Math.cos(ca) * spd;
+          bul.vy = Math.sin(ca) * spd;
+        }
+      }
+      var hitSomething = false;
+      /* meteor hits */
+      for (var ri = G.rocks.length - 1; ri >= 0; ri--) {
+        var rk = G.rocks[ri];
+        if (SC.dist2(bul.x, bul.y, rk.x, rk.y) < Math.pow(rk.r * 0.82 + 8, 2)) {
+          hitSomething = true;
+          rk.hp = (rk.hp == null ? (rk.r > 52 ? 3 : 2) : rk.hp) - 1;
+          burst(bul.x, bul.y, 5, [C.accent, C.ink], 220, 0.3);
+          if (rk.hp <= 0) {
+            burst(rk.x, rk.y, rk.r > 52 ? 22 : 12, [C.ink, C.accent, C.surface], 420, 0.6);
+            SC.Audio.explode(rk.r > 52);
+            G.score += rk.r > 52 ? 12 : 6;
+            if (rk.r > 52) {
+              for (var sk = 0; sk < 2; sk++) {
+                G.rocks.push({ x: rk.x + (sk ? 18 : -18), y: rk.y, vx: (sk ? 1 : -1) * rand(90, 150), vy: rand(-120, 40), r: rk.r * 0.5, rot: Math.random() * SC.TAU, vr: rand(-2, 2), seed: (Math.random() * 99999) | 0, hp: 1 });
+              }
+            }
+            G.rocks.splice(ri, 1);
+          }
+          break;
+        }
+      }
+      if (hitSomething) { G.bullets.splice(bu, 1); continue; }
+      /* boss hits */
+      if (G.boss) {
+        var bw = -1;
+        for (var bw2 = 0; bw2 < G.boss.weak.length; bw2++) {
+          if (G.boss.weak[bw2].taken) continue;
+          var wp2 = bossSeg(12 + bw2 * 14);
+          if (SC.dist2(bul.x, bul.y, wp2.x, wp2.y) < Math.pow(34, 2)) { bw = bw2; break; }
+        }
+        if (bw >= 0 && G.boss.phase === 'exposed') { takeWeak(bw); G.bullets.splice(bu, 1); continue; }
+        if (bw >= 0) { burst(bul.x, bul.y, 4, [C.ink, C.sub], 180, 0.25); G.bullets.splice(bu, 1); continue; }
+        /* body is ink smoke: bullets pass through, only weak points count */
       }
     }
 
@@ -587,9 +703,10 @@
       g.beginPath(); g.arc(0, 0, 36, 0, SC.TAU);
       g.setLineDash([4, 8]); g.lineWidth = 2; g.strokeStyle = C.accent2; g.stroke(); g.setLineDash([]);
       g.strokeStyle = C.accent2; g.fillStyle = C.accent2; g.lineWidth = 4; g.lineCap = 'round';
-      if (p.type === 'magnet') {
-        g.beginPath(); g.arc(0, 2, 11, Math.PI, 0); g.stroke();
-        g.beginPath(); g.moveTo(-11, 2); g.lineTo(-11, 13); g.moveTo(11, 2); g.lineTo(11, 13); g.stroke();
+      if (p.type === 'spread') {
+        g.beginPath(); g.moveTo(-2, 12); g.lineTo(-8, -8); g.stroke();
+        g.beginPath(); g.moveTo(-2, 12); g.lineTo(0, -12); g.stroke();
+        g.beginPath(); g.moveTo(-2, 12); g.lineTo(8, -8); g.stroke();
       } else if (p.type === 'freeze') {
         for (var k = 0; k < 3; k++) {
           g.save(); g.rotate(k * Math.PI / 3);
@@ -633,44 +750,49 @@
 
   function drawBoss(g) {
     if (!G.boss) return;
-    var t = G.boss.t;
-    /* body from tail to head so the head sits on top */
-    for (var i = 7; i >= 0; i--) {
-      var p = bossPos(i, t);
-      var r = i === 0 ? 52 : 40 - i * 2.6;
+    var p = G.boss.path;
+    var i, seg, r;
+    /* tail to head */
+    for (i = 12; i >= 0; i--) {
+      seg = p[Math.min(i * 6, p.length - 1)] || { x: G.boss.x || 0, y: G.boss.y || 0 };
+      r = i === 0 ? 46 : Math.max(14, 40 - i * 2.1);
       g.save();
-      g.translate(p.x, p.y);
+      g.translate(seg.x, seg.y);
       g.beginPath(); g.arc(0, 0, r, 0, SC.TAU);
       g.fillStyle = G.boss.flash > 0 ? C.surface : C.ink;
       g.fill();
       g.save();
       g.beginPath(); g.arc(0, 0, r, 0, SC.TAU); g.clip();
-      g.globalAlpha = 0.35;
+      g.globalAlpha = 0.32;
       g.fillStyle = SC.halftone(g, C.bg, 0.5, 8);
-      g.beginPath(); g.arc(-r * 0.3, -r * 0.3, r * 0.75, 0, SC.TAU); g.fill();
+      g.beginPath(); g.arc(-r * 0.3, -r * 0.3, r * 0.72, 0, SC.TAU); g.fill();
       g.restore();
       g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
       g.restore();
     }
-    /* head details */
-    var h = bossPos(0, t);
+    /* head details at the path front */
+    var h = p[0] || { x: G.boss.x || 0, y: G.boss.y || 0 };
     g.save();
     g.translate(h.x, h.y);
-    g.beginPath(); g.arc(12, -10, 8, 0, SC.TAU); g.fillStyle = C.accent; g.fill();
+    g.beginPath(); g.arc(14, -12, 8, 0, SC.TAU); g.fillStyle = C.accent; g.fill();
     g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke();
     g.strokeStyle = C.ink; g.lineWidth = 5; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(20, -34); g.lineTo(44, -58); g.stroke();
-    g.beginPath(); g.moveTo(4, -44); g.lineTo(10, -70); g.stroke();
+    g.beginPath(); g.moveTo(24, -30); g.lineTo(52, -52); g.stroke();
+    g.beginPath(); g.moveTo(6, -40); g.lineTo(10, -66); g.stroke();
+    g.beginPath(); g.moveTo(30, 12); g.lineTo(58, 26); g.stroke();
     g.restore();
-    /* weak points */
+    /* weak points along the spine */
     for (var wi = 0; wi < G.boss.weak.length; wi++) {
-      var wk = G.boss.weak[wi];
-      if (wk.taken) continue;
-      var wp = bossPos(2 + wi * 2, t);
-      SC.star4(g, wp.x, wp.y, 20 + Math.sin(G.t * 6 + wi) * 3, G.t * 0.4, C.accent, 4);
+      if (G.boss.weak[wi].taken) continue;
+      var ws = p[Math.min(12 + wi * 14, p.length - 1)] || h;
+      var bright = G.boss.phase === 'exposed';
+      g.save();
+      g.globalAlpha = bright ? 1 : 0.3;
+      SC.star4(g, ws.x, ws.y, (bright ? 22 : 15) + Math.sin(G.t * 6 + wi) * 3, G.t * 0.4, C.accent, 4);
+      g.restore();
     }
     /* hp pips */
-    SC.comicText(g, '墨 龙', W / 2, 208, { size: 22, color: C.accent, align: 'center', lineWidth: 0, ghost: false });
+    SC.comicText(g, G.boss.phase === 'exposed' ? '墨 龙 · 破绽！' : '墨 龙', W / 2, 208, { size: 22, color: G.boss.phase === 'exposed' ? C.accent : C.sub, align: 'center', lineWidth: 0, ghost: false });
     var hx = W / 2 - 40, hy = 240;
     for (var hp = 0; hp < G.boss.maxHp; hp++) {
       g.save();
@@ -678,6 +800,22 @@
       g.beginPath(); g.moveTo(0, -10); g.lineTo(10, 0); g.lineTo(0, 10); g.lineTo(-10, 0); g.closePath();
       if (hp < G.boss.hp) { g.fillStyle = C.accent; g.fill(); }
       g.lineWidth = 2.5; g.strokeStyle = C.ink; g.stroke();
+      g.restore();
+    }
+  }
+
+  function drawBullets(g) {
+    for (var i = 0; i < G.bullets.length; i++) {
+      var b = G.bullets[i];
+      g.save();
+      g.translate(b.x, b.y);
+      g.rotate(Math.atan2(b.vy, b.vx));
+      g.strokeStyle = 'rgba(216,64,46,0.65)';
+      g.lineWidth = 4;
+      g.beginPath(); g.moveTo(-16, 0); g.lineTo(-4, 0); g.stroke();
+      g.beginPath(); g.arc(0, 0, 6, 0, SC.TAU);
+      g.fillStyle = C.ink; g.fill();
+      g.lineWidth = 2.5; g.strokeStyle = C.accent; g.stroke();
       g.restore();
     }
   }
@@ -948,7 +1086,7 @@
 
     /* active power-ups */
     var fx = 372;
-    ['magnet', 'freeze', 'phase'].forEach(function (key) {
+    ['spread', 'freeze', 'phase'].forEach(function (key) {
       var left = G.effects[key];
       if (left <= 0) return;
       g.save();
@@ -970,7 +1108,7 @@
     g.fillStyle = SC.halftone(g, C.accent2, G.slow.active ? 0.62 : 0.4, 10);
     g.fillRect(mx, my, mw, mh);
     g.restore();
-    SC.comicText(g, '空格 缓速', mx + mw / 2, my - 14, { size: 21, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
+    SC.comicText(g, '空格 缓速　·　J / 左键 攻击', mx + mw / 2, my - 14, { size: 21, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
     if (G.slow.lock > 0) SC.comicText(g, '过热', mx + mw / 2, my + 30, { size: 18, color: C.accent, align: 'center', outline: false, ghost: false });
 
     /* best */
@@ -1087,7 +1225,7 @@
     SC.panel(g, 104, 700, 500, 104, { lw: 6, fill: C.accent });
     SC.comicText(g, '点击开始', 354, 772, { size: 56, color: C.surface, align: 'center', lineWidth: 2 });
     g.restore();
-    SC.comicText(g, '鼠标 / 触屏移动　空格 缓速　M 静音　P 暂停　G 图鉴', 108, 866, { size: 22, color: C.sub, outline: false, ghost: false });
+    SC.comicText(g, '鼠标 / 触屏移动　空格 缓速　J / 左键 攻击　M 静音　G 图鉴', 108, 866, { size: 22, color: C.sub, outline: false, ghost: false });
 
     /* best */
     if (G.best > 0) {
@@ -1341,6 +1479,7 @@
       drawPickups(ctx);
       drawRocks(ctx);
       drawBoss(ctx);
+      drawBullets(ctx);
       drawParts(ctx);
       drawShip(ctx);
       drawPops(ctx);
@@ -1381,6 +1520,7 @@
     canvas.addEventListener('pointerdown', function (e) {
       SC.Audio.resume();
       pointers[e.pointerId] = true;
+      if (G.state === 'play' && !G.card && !G.paused && e.button === 0) { G.firing = true; G.fireCd = 0; }
       if (Object.keys(pointers).length >= 2 && G.state === 'play') G.slow.active = true;
       if (e.button === 2) { if (G.state === 'play') G.slow.active = true; return; }
       if (G.state === 'gallery') { G.state = 'title'; return; }
@@ -1396,6 +1536,7 @@
     });
     canvas.addEventListener('pointerup', function (e) {
       delete pointers[e.pointerId];
+      if (e.button === 0) G.firing = false;
       if (Object.keys(pointers).length < 2 && G.state === 'play' && G.timeScale < 0.85) G.slow.active = false;
       if (e.button === 2) G.slow.active = false;
     }, { passive: true });
@@ -1404,7 +1545,7 @@
       G.slow.active = false;
     }, { passive: true });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    global.addEventListener('blur', function () { if (G.state === 'play') G.paused = true; G.slow.active = false; });
+    global.addEventListener('blur', function () { if (G.state === 'play') G.paused = true; G.slow.active = false; G.firing = false; });
     global.addEventListener('keydown', function (e) {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -1413,6 +1554,7 @@
       }
       if (e.code === 'KeyP' && G.state === 'play') G.paused = !G.paused;
       if (e.code === 'KeyM') { SC.Audio.setMuted(!SC.Audio.muted); }
+      if (e.code === 'KeyJ') { if (G.state === 'play' && !G.card) { G.firing = true; G.fireCd = 0; } }
       if (e.code === 'KeyG' && (G.state === 'title' || G.state === 'gallery')) { G.state = G.state === 'gallery' ? 'title' : 'gallery'; }
       if (e.code === 'Escape' && G.state === 'gallery') G.state = 'title';
       if (e.code === 'KeyR' && G.state !== 'title') startGame();
@@ -1423,6 +1565,7 @@
     });
     global.addEventListener('keyup', function (e) {
       if (e.code === 'Space') G.slow.active = false;
+      if (e.code === 'KeyJ') G.firing = false;
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
       if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
       if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false;
@@ -1459,6 +1602,10 @@
     for (var k = 0; k < base.next; k++) base.stars[k].lit = true;
     base.done = [0, 1, 2, 3];
     base.banner = { text: '第 5 章', sub: '狮子座 · 7.23 – 8.22', life: 1.4, max: 1.9 };
+    base.effects.spread = 6;
+    base.bullets.push({ x: 1000, y: 700, vx: 900, vy: -1200, life: 1 });
+    base.bullets.push({ x: 940, y: 690, vx: 850, vy: -1250, life: 1 });
+    base.pickups.push({ x: 1260, y: 560, phase: 0.8, type: 'freeze' });
 
     if (name === 'hit') {
       base.shake = 10;
@@ -1483,7 +1630,10 @@
       base.best = 5120;
     }
     if (name === 'boss') {
-      base.boss = { t: 6.2, dur: 18, hp: 2, maxHp: 3, weak: [{ taken: true, at: 0.25 }, { taken: false, at: 0.55 }, { taken: false, at: 0.85 }], flash: 0 };
+      base.boss = { t: 6.2, dur: 26, hp: 2, maxHp: 3, weak: [{ taken: true }, { taken: false, hp: 1 }, { taken: false, hp: 2 }], flash: 0, x: 1120, y: 380, path: [], phase: 'exposed', phaseT: 1.2 };
+      for (var bp = 0; bp < 220; bp++) base.boss.path.push({ x: 1120 - bp * 4.2, y: 380 + Math.sin(bp * 0.09) * 80 });
+      base.bullets.push({ x: 1000, y: 620, vx: 700, vy: -900, life: 1 });
+      base.bullets.push({ x: 1060, y: 640, vx: 720, vy: -860, life: 1 });
       base.banner = null;
       base.pickups.push({ x: 1180, y: 620, phase: 0.4, type: 'magnet' });
     }

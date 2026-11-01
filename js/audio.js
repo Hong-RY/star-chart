@@ -72,6 +72,19 @@
       else { tone('sine', 150, 420, 0.25, 0.1); }
     },
     wave: function () { tone('sine', 90, 60, 0.22, 0.3); noise(0.18, 0.22, 500); },
+    attack: function () {
+      tone('square', 1180, 520, 0.07, 0.10);
+      tone('sawtooth', 2400, 1600, 0.04, 0.04);
+    },
+    explode: function (big) {
+      noise(big ? 0.55 : 0.3, big ? 0.5 : 0.32, big ? 700 : 1400);
+      tone('sine', big ? 120 : 180, 38, big ? 0.5 : 0.26, big ? 0.4 : 0.22);
+      if (big) tone('square', 70, 30, 0.35, 0.18, 0.02);
+    },
+    bossHit: function () {
+      noise(0.16, 0.3, 900);
+      tone('square', 220, 90, 0.12, 0.16);
+    },
     over: function () { tone('triangle', 330, 220, 0.25, 0.2); tone('triangle', 220, 110, 0.5, 0.2, 0.22); }
   };
 })(window);
