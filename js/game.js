@@ -273,7 +273,7 @@
 
     /* engraved astrolabe, very low contrast, gives the page a centre of gravity */
     g.save();
-    g.strokeStyle = 'rgba(110,101,82,0.30)';
+    g.strokeStyle = 'rgba(20,19,16,0.18)';
     g.lineWidth = 2;
     g.beginPath(); g.arc(W / 2, H * 0.54, 330, 0, SC.TAU); g.stroke();
     g.beginPath(); g.arc(W / 2, H * 0.54, 300, 0, SC.TAU); g.stroke();
@@ -552,7 +552,7 @@
     SC.comicText(g, 'STAR CHART / 第一话', 88, 136, { size: 18, color: C.sub, lineWidth: 0, ghost: false });
 
     /* score */
-    SC.panel(g, W - 470, 56, 406, 136, { sx: -8, sy: 8, lw: 5 });
+    SC.panel(g, W - 470, 56, 406, 136, { sx: 8, sy: 8, lw: 5 });
     SC.comicText(g, 'SCORE', W - 100, 94, { size: 22, color: C.sub, align: 'right', ghost: false, lineWidth: 0 });
     SC.comicText(g, String(Math.round(G.shownScore)), W - 96, 166, { size: 78, color: C.ink, align: 'right', lineWidth: 0 });
 
@@ -564,7 +564,7 @@
       g.translate(cx + 150, cy + 32);
       g.scale(cs, cs);
       g.translate(-(cx + 150), -(cy + 32));
-      SC.panel(g, cx, cy, 406, 64, { lw: 5, fill: C.accent, sx: 6, sy: 6 });
+      SC.panel(g, cx, cy, 406, 64, { lw: 5, fill: C.accent, sx: 8, sy: 8 });
       SC.comicText(g, '×' + mult() + ' 连击', cx + 203, cy + 44, { size: 32, color: C.surface, align: 'center', lineWidth: 0, ghost: false });
       g.restore();
     }
@@ -585,7 +585,7 @@
 
     /* slow meter */
     var mx = W / 2 - 240, my = 966, mw = 480, mh = 40;
-    SC.panel(g, mx, my, mw, mh, { sx: 7, sy: 7, lw: 5 });
+    SC.panel(g, mx, my, mw, mh, { sx: 8, sy: 8, lw: 5 });
     var e = G.slow.energy;
     g.save();
     g.beginPath(); g.rect(mx + 6, my + 6, (mw - 12) * e, mh - 12); g.clip();
@@ -638,7 +638,7 @@
       var x = 1240 + i * 210 + Math.sin(t * 0.25 + i * 2.1) * 26;
       var y = 120 + ((t * 20 + i * 300) % (H - 160));
       g.save(); g.translate(x, y); g.rotate(t * 0.18 + i * 1.3);
-      SC.printShape(g, rockShape(26 + i * 8, 210 + i * 13), { fill: C.ink, lw: 4, shade: { color: C.accent, density: 0.4, dx: -5, dy: -6 } });
+      SC.printShape(g, rockShape(26 + i * 8, 210 + i * 13), { fill: C.ink, lw: 4, shade: { color: C.bg, density: 0.45, dx: -5, dy: -6, alpha: 0.35 } });
       g.restore();
     }
 
@@ -654,6 +654,37 @@
     for (var k = 0; k < 7; k++) {
       SC.star4(g, 1310 + Math.sin(k * 2.3) * 240, 320 + Math.cos(k * 1.9) * 180, 8 + (k % 3) * 3, t * 0.2 + k, C.accent, 3);
     }
+
+    /* hero comet: the player, printed large over the chart path */
+    g.save();
+    g.strokeStyle = 'rgba(29,78,137,0.5)';
+    g.lineWidth = 3;
+    g.setLineDash([11, 13]);
+    g.beginPath();
+    g.moveTo(300, 930);
+    g.bezierCurveTo(560, 720, 880, 560, 1290, 470);
+    g.stroke();
+    g.setLineDash([]);
+    g.translate(985, 625);
+    g.rotate(0.38);
+    g.scale(2.25, 2.25);
+    var hero = [[0, -46], [15, -6], [26, 20], [8, 13], [0, 26], [-8, 13], [-26, 20], [-15, -6]];
+    SC.path(g, hero);
+    g.fillStyle = C.bg; g.fill();
+    g.lineWidth = 16; g.strokeStyle = C.bg; g.lineJoin = 'round'; g.stroke();
+    SC.printShape(g, hero, { fill: '#FFFFFF', lw: 6, shade: { color: C.sub, density: 0.12, dx: 4, dy: 5 } });
+    g.beginPath(); g.moveTo(0, -46); g.lineTo(9, -20); g.lineTo(-9, -20); g.closePath();
+    g.fillStyle = C.accent2; g.fill(); g.lineWidth = 4; g.strokeStyle = C.ink; g.stroke();
+    g.beginPath(); g.arc(0, -6, 5.5, 0, SC.TAU);
+    g.fillStyle = C.accent2; g.fill(); g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke();
+    g.restore();
+
+    /* hand-written label pointing at the comet */
+    g.save();
+    g.strokeStyle = C.sub; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(1110, 744); g.quadraticCurveTo(1060, 726, 1018, 700); g.stroke();
+    g.restore();
+    SC.comicText(g, '你在这里', 1118, 756, { size: 24, color: C.sub, outline: false, ghost: false });
 
     /* caption panel */
     SC.panel(g, 100, 104, 300, 70, { lw: 4 });
@@ -682,7 +713,7 @@
 
     /* best */
     if (G.best > 0) {
-      SC.panel(g, W - 452, 872, 340, 100, { sx: -8, sy: 8, lw: 4 });
+      SC.panel(g, W - 452, 872, 340, 100, { sx: 8, sy: 8, lw: 4 });
       SC.comicText(g, '最高分', W - 140, 914, { size: 22, color: C.sub, align: 'right', outline: false, ghost: false });
       SC.comicText(g, String(G.best), W - 140, 956, { size: 46, color: C.ink, align: 'right', lineWidth: 4 });
     }

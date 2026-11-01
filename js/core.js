@@ -191,9 +191,9 @@
     if (opt.ghost !== false && size >= 26) {
       var gx = opt.ghostX == null ? Math.max(2, size * 0.012) : opt.ghostX;
       var gy = opt.ghostY == null ? Math.max(2, size * 0.012) : opt.ghostY;
-      ctx.fillStyle = opt.ghostA || 'rgba(29,78,137,0.55)';
+      ctx.fillStyle = opt.ghostA || 'rgba(29,78,137,0.30)';
       ctx.fillText(text, x - gx, y + gy);
-      ctx.fillStyle = opt.ghostB || 'rgba(216,64,46,0.42)';
+      ctx.fillStyle = opt.ghostB || 'rgba(216,64,46,0.24)';
       ctx.fillText(text, x + gx, y - gy);
     }
     if (opt.outline !== false && lw > 0) {
