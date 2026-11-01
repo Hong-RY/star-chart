@@ -7,3 +7,20 @@ html, body {
 }
 body { touch-action: none; }
 #stage { display: block; width: 100%; height: 100%; }
+
+#rotate { display: none; }
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotate {
+    display: flex; position: fixed; inset: 0; z-index: 9;
+    align-items: center; justify-content: center;
+    background: #F2ECDC;
+  }
+  #rotate .card {
+    display: flex; flex-direction: column; gap: 10px; align-items: center;
+    border: 6px solid #141310; background: #FBF7EC; padding: 28px 36px;
+    box-shadow: 10px 10px 0 #141310;
+    font-family: 'Microsoft YaHei', sans-serif; color: #141310;
+  }
+  #rotate b { font-size: 30px; letter-spacing: 2px; }
+  #rotate span { font-size: 14px; color: #6E6552; }
+}

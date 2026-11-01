@@ -365,7 +365,16 @@
 
       g.rotate(r.rot);
       var pts = rockShape(r.r, r.seed);
-      SC.printShape(g, pts, { fill: C.ink, lw: 5, shade: { color: C.accent, density: 0.3, dx: -8, dy: -10, tile: 9, alpha: 0.55 } });
+      SC.printShape(g, pts, { fill: C.ink, lw: 5 });
+      /* directional red halftone crescent instead of an all-over dot pattern */
+      g.save();
+      SC.path(g, pts); g.clip();
+      g.globalAlpha = 0.75;
+      g.fillStyle = SC.halftone(g, C.accent, 0.5, 8);
+      g.beginPath();
+      g.arc(-r.r * 0.42, -r.r * 0.46, r.r * 0.72, 0, SC.TAU);
+      g.fill();
+      g.restore();
 
       /* misregistration ghost in print blue */
       g.save();
