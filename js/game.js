@@ -15,7 +15,7 @@
       timeScale: 1,
       targetScale: 1,
       score: 0, shownScore: 0,
-      best: +(localStorage.getItem('starchart.best') || 0),
+      best: (function () { try { return +(localStorage.getItem('starchart.best') || 0); } catch (e) { return 0; } })(),
       lives: 3, wave: 1, waveTimer: 0,
       combo: 0, comboTimer: 0,
       slow: { energy: 1, active: false, lock: 0 },
@@ -804,7 +804,7 @@
       G.slow.active = false;
     }, { passive: true });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    global.addEventListener('blur', function () { G.paused = true; G.slow.active = false; });
+    global.addEventListener('blur', function () { if (G.state === 'play') G.paused = true; G.slow.active = false; });
     global.addEventListener('keydown', function (e) {
       if (e.code === 'Space') {
         e.preventDefault();
