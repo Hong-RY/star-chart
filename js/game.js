@@ -236,11 +236,23 @@
     spawnPickup();
     SC.Audio.clear();
     G.shake = 16;
+    var splits = [];
     for (var i = 0; i < G.rocks.length; i++) {
       var r = G.rocks[i];
       burst(r.x, r.y, 12, [C.ink, C.accent], 420, 0.7);
+      /* big meteors crack in two when the shockwave hits: clearing the page also seeds it */
+      if (r.r > 52) {
+        for (var k = 0; k < 2; k++) {
+          splits.push({
+            x: r.x + (k ? 20 : -20), y: r.y, vx: (k ? 1 : -1) * rand(90, 160), vy: rand(-180, -80),
+            r: r.r * 0.52, rot: Math.random() * SC.TAU, vr: rand(-2, 2),
+            seed: (Math.random() * 99999) | 0, dead: false
+          });
+        }
+      }
     }
     G.rocks.length = 0;
+    for (var sp = 0; sp < splits.length; sp++) G.rocks.push(splits[sp]);
     for (var k = 0; k < 3; k++) G.parts.push({ ring: true, x: W / 2, y: H * 0.5, r0: 30 + k * 70, life: 1.0, max: 1.0, color: C.accent });
   }
 
