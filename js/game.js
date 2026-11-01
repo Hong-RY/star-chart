@@ -277,8 +277,9 @@
     g.lineWidth = 2;
     g.beginPath(); g.arc(W / 2, H * 0.54, 330, 0, SC.TAU); g.stroke();
     g.beginPath(); g.arc(W / 2, H * 0.54, 300, 0, SC.TAU); g.stroke();
+    var spin = G.t * 0.012;
     for (var d0 = 0; d0 < 72; d0++) {
-      var a0 = (d0 / 72) * SC.TAU;
+      var a0 = (d0 / 72) * SC.TAU + spin;
       var rr0 = d0 % 6 === 0 ? 288 : 300;
       g.beginPath();
       g.moveTo(W / 2 + Math.cos(a0) * rr0, H * 0.54 + Math.sin(a0) * rr0);
