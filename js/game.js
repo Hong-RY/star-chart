@@ -62,8 +62,8 @@
       });
     }
   }
-  function popup(x, y, text, size, color) {
-    G.pops.push({ x: x, y: y, text: text, life: 0.95, max: 0.95, size: size || 44, color: color || C.ink });
+  function popup(x, y, text, size, color, burst) {
+    G.pops.push({ x: x, y: y, text: text, life: 0.95, max: 0.95, size: size || 44, color: color || C.ink, burst: !!burst });
   }
   function banner(text, sub) {
     G.banner = { text: text, sub: sub || '', life: 1.9, max: 1.9 };
@@ -116,7 +116,7 @@
     G.hitstop = 0.075;
     G.combo = 0; G.comboTimer = 0;
     burst(G.ship.x, G.ship.y, 26, [C.ink, C.accent, C.accent2], 520, 0.75);
-    popup(G.ship.x, G.ship.y - 70, 'CRASH!', 64, C.accent);
+    popup(G.ship.x, G.ship.y - 70, 'CRASH!', 64, C.surface, true);
     SC.Audio.hit();
     if (G.lives <= 0) gameOver();
   }
@@ -511,6 +511,13 @@
       g.globalAlpha = Math.min(1, (1 - k) * 2.2);
       g.translate(p.x, p.y - k * 46);
       g.scale(scale * (1 + k * 0.06), scale * (1 + k * 0.06));
+      if (p.burst) {
+        var br = p.size * 2.1;
+        g.save();
+        g.globalAlpha = Math.min(1, (1 - k) * 3) * 0.95;
+        SC.printShape(g, SC.burstPts(0, 0, br, br * 0.72, 16, p.size), { fill: C.accent, lw: 6 });
+        g.restore();
+      }
       SC.comicText(g, p.text, 0, 0, { size: p.size, color: p.color, align: 'center', lineWidth: Math.max(3, p.size * 0.045) });
       g.restore();
     }
@@ -870,7 +877,7 @@
     }
     if (name === 'clear') {
       base.score = 2480; base.shownScore = 2480;
-      base.pops.push({ x: W / 2, y: 470, text: '星座完成', life: 0.6, max: 0.95, size: 92, color: C.accent });
+      base.pops.push({ x: W / 2, y: 470, text: '星座完成', life: 0.6, max: 0.95, size: 92, color: C.surface, burst: true });
       base.banner = null;
       base.parts.push({ ring: true, x: W / 2, y: H / 2, r0: 60, life: 0.8, max: 0.9, color: C.accent2 });
       base.parts.push({ ring: true, x: W / 2, y: H / 2, r0: 180, life: 0.8, max: 0.9, color: C.accent2 });
