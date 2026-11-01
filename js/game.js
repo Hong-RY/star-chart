@@ -16,16 +16,16 @@
       targetScale: 1,
       score: 0, shownScore: 0,
       best: (function () { try { return +(localStorage.getItem('starchart.best') || 0); } catch (e) { return 0; } })(),
-      lives: 3, wave: 1, waveTimer: 0,
+      lives: 3, wave: 1,
       combo: 0, comboTimer: 0,
       slow: { energy: 1, active: false, lock: 0 },
       ship: { x: W / 2, y: H * 0.74, vx: 0, vy: 0, tilt: 0, invuln: 0 },
       target: { x: W / 2, y: H * 0.74 },
       stars: [], rocks: [], parts: [], pops: [],
-      chart: [],            /* completed constellations: array of point arrays */
-      trailPts: [],         /* stars collected for the constellation being drawn */
+      constIdx: 0, next: 0, done: [], card: null, cardT: 0,
+      shields: 0, damageThis: false,
       shake: 0, hitstop: 0, flash: 0, banner: null, overT: 0, paused: false,
-      spawnT: 0.4, starT: 0.2, comboPop: 0
+      spawnT: 0.6, comboPop: 0
     };
   }
   var G = makeState();
@@ -83,14 +83,53 @@
     });
   }
 
-  function spawnStar() {
-    for (var k = 0; k < 12; k++) {
-      var x = rand(180, W - 180), y = rand(240, H - 300), ok = true;
-      for (var i = 0; i < G.rocks.length; i++) {
-        if (SC.dist2(x, y, G.rocks[i].x, G.rocks[i].y) < Math.pow(G.rocks[i].r + 70, 2)) { ok = false; break; }
-      }
-      if (ok) { G.stars.push({ x: x, y: y, phase: Math.random() * SC.TAU, seed: (Math.random() * 9999) | 0 }); return; }
+  /* ---------------- 黄道十二宫：星点按真实星座形状排布，按连线顺序收集 ---------------- */
+  var CONSTELLATIONS = [
+    { id: 'aries', name: '白羊座', latin: 'ARIES', dates: '3.21 – 4.19', myth: '金羊毛的化身', stars: [[0.18, 0.62], [0.38, 0.50], [0.58, 0.46], [0.82, 0.34]], extra: [] },
+    { id: 'taurus', name: '金牛座', latin: 'TAURUS', dates: '4.20 – 5.20', myth: '宙斯化身的白牛', stars: [[0.12, 0.22], [0.34, 0.40], [0.50, 0.58], [0.66, 0.40], [0.88, 0.22], [0.50, 0.74]], extra: [[2, 5]] },
+    { id: 'gemini', name: '双子座', latin: 'GEMINI', dates: '5.21 – 6.21', myth: '永不分离的双生子', stars: [[0.28, 0.14], [0.30, 0.42], [0.26, 0.78], [0.42, 0.58], [0.62, 0.18], [0.66, 0.46], [0.70, 0.80]], extra: [[3, 6]] },
+    { id: 'cancer', name: '巨蟹座', latin: 'CANCER', dates: '6.22 – 7.22', myth: '赫拉派出的巨蟹', stars: [[0.22, 0.58], [0.42, 0.44], [0.62, 0.56], [0.80, 0.34]], extra: [[0, 2]] },
+    { id: 'leo', name: '狮子座', latin: 'LEO', dates: '7.23 – 8.22', myth: '尼米亚的猛狮', stars: [[0.16, 0.72], [0.24, 0.48], [0.34, 0.28], [0.50, 0.24], [0.60, 0.36], [0.56, 0.54], [0.72, 0.64], [0.86, 0.50]], extra: [[4, 7], [5, 7]] },
+    { id: 'virgo', name: '处女座', latin: 'VIRGO', dates: '8.23 – 9.22', myth: '正义女神与麦穗', stars: [[0.18, 0.24], [0.38, 0.38], [0.54, 0.54], [0.66, 0.72], [0.56, 0.86], [0.80, 0.60], [0.88, 0.42]], extra: [[2, 5]] },
+    { id: 'libra', name: '天秤座', latin: 'LIBRA', dates: '9.23 – 10.23', myth: '正义女神的秤', stars: [[0.26, 0.36], [0.52, 0.28], [0.74, 0.42], [0.58, 0.64], [0.32, 0.60]], extra: [] },
+    { id: 'scorpio', name: '天蝎座', latin: 'SCORPIO', dates: '10.24 – 11.22', myth: '猎户俄里翁的宿敌', stars: [[0.18, 0.20], [0.28, 0.36], [0.40, 0.48], [0.52, 0.60], [0.64, 0.72], [0.78, 0.80], [0.86, 0.68], [0.80, 0.56]], extra: [[3, 7]] },
+    { id: 'sagittarius', name: '射手座', latin: 'SAGITTARIUS', dates: '11.23 – 12.21', myth: '贤者半人马喀戎', stars: [[0.26, 0.56], [0.42, 0.44], [0.58, 0.50], [0.60, 0.70], [0.44, 0.76], [0.30, 0.72], [0.52, 0.30], [0.70, 0.36]], extra: [[1, 7], [2, 7]] },
+    { id: 'capricorn', name: '摩羯座', latin: 'CAPRICORN', dates: '12.22 – 1.19', myth: '潘神的鱼尾', stars: [[0.22, 0.46], [0.40, 0.62], [0.58, 0.54], [0.74, 0.66], [0.60, 0.80], [0.42, 0.74]], extra: [[0, 5]] },
+    { id: 'aquarius', name: '水瓶座', latin: 'AQUARIUS', dates: '1.20 – 2.18', myth: '倾倒青春之水', stars: [[0.18, 0.42], [0.34, 0.56], [0.46, 0.42], [0.58, 0.56], [0.70, 0.40], [0.82, 0.52]], extra: [[0, 3]] },
+    { id: 'pisces', name: '双鱼座', latin: 'PISCES', dates: '2.19 – 3.20', myth: '爱与美的两条鱼', stars: [[0.14, 0.28], [0.26, 0.44], [0.34, 0.66], [0.24, 0.82], [0.46, 0.56], [0.64, 0.44], [0.78, 0.56], [0.80, 0.72], [0.68, 0.86]], extra: [[4, 6]] }
+  ];
+
+  function projectConstellation(c) {
+    var bx0 = 340, bx1 = 1580, by0 = 270, by1 = 880;
+    var minx = 1, maxx = 0, miny = 1, maxy = 0, i;
+    for (i = 0; i < c.stars.length; i++) {
+      minx = Math.min(minx, c.stars[i][0]); maxx = Math.max(maxx, c.stars[i][0]);
+      miny = Math.min(miny, c.stars[i][1]); maxy = Math.max(maxy, c.stars[i][1]);
     }
+    var spanX = Math.max(0.001, maxx - minx), spanY = Math.max(0.001, maxy - miny);
+    var scale = Math.min((bx1 - bx0) / spanX, (by1 - by0) / spanY);
+    var ox = bx0 + ((bx1 - bx0) - spanX * scale) / 2;
+    var oy = by0 + ((by1 - by0) - spanY * scale) / 2;
+    var out = [];
+    for (i = 0; i < c.stars.length; i++) {
+      out.push({
+        x: ox + (c.stars[i][0] - minx) * scale,
+        y: oy + (c.stars[i][1] - miny) * scale,
+        order: i, lit: false, phase: Math.random() * SC.TAU
+      });
+    }
+    return out;
+  }
+
+  function startConstellation(idx) {
+    var c = CONSTELLATIONS[idx];
+    G.constIdx = idx;
+    G.wave = idx + 1;
+    G.next = 0;
+    G.stars = projectConstellation(c);
+    G.damageThis = false;
+    banner('第 ' + (idx + 1) + ' 章', c.name + ' · ' + c.dates);
+    SC.Audio.wave();
   }
 
   /* ---------------- game actions ---------------- */
@@ -99,7 +138,7 @@
     G = makeState();
     G.state = 'play';
     G.best = best;
-    banner('第 1 波', '墨陨开始落下');
+    startConstellation(0);
     SC.Audio.resume();
   }
   function gameOver() {
@@ -110,6 +149,18 @@
   }
   function hitShip() {
     if (G.ship.invuln > 0 || G.state !== 'play') return;
+    G.damageThis = true;
+    G.combo = 0; G.comboTimer = 0;
+    if (G.shields > 0) {
+      G.shields--;
+      G.ship.invuln = 1.1;
+      G.shake = 10;
+      G.hitstop = 0.05;
+      burst(G.ship.x, G.ship.y, 20, [C.accent2, C.ink, C.surface], 460, 0.7);
+      popup(G.ship.x, G.ship.y - 64, '护盾碎', 52, C.accent2);
+      SC.Audio.hit();
+      return;
+    }
     G.lives--;
     G.ship.invuln = 1.7;
     G.shake = 13;
@@ -120,25 +171,27 @@
     SC.Audio.hit();
     if (G.lives <= 0) gameOver();
   }
-  function collectStar(i) {
-    var s = G.stars[i];
-    G.stars.splice(i, 1);
+  function collectStar() {
+    var s = G.stars[G.next];
+    if (!s) return;
+    s.lit = true;
     G.combo++; G.comboTimer = 2.2; G.comboPop = 1;
-    var gain = 10 * mult();
+    var gain = 12 * mult();
     G.score += gain;
-    G.trailPts.push({ x: s.x, y: s.y });
     burst(s.x, s.y, 10, [C.accent, C.ink, C.surface], 260, 0.5);
     popup(s.x, s.y - 34, '+' + gain, 40, C.ink);
     SC.Audio.collect(G.combo);
     if (G.combo > 0 && G.combo % 3 === 0) SC.Audio.combo(G.combo);
-    if (G.trailPts.length >= 7) completeConstellation();
+    G.next++;
+    if (G.next >= G.stars.length) completeConstellation();
   }
   function completeConstellation() {
-    G.chart.push(G.trailPts.slice());
-    G.trailPts = [];
-    G.score += 100;
-    popup(W / 2, H * 0.44, '星座完成', 96, C.accent);
-    popup(W / 2, H * 0.44 + 78, '+100', 56, C.ink);
+    var c = CONSTELLATIONS[G.constIdx];
+    var perfect = !G.damageThis;
+    G.done.push(G.constIdx);
+    G.score += 120 + (perfect ? 120 : 0);
+    if (perfect) G.shields = Math.min(2, G.shields + 1);
+    G.card = { idx: G.constIdx, t: 0, perfect: perfect };
     SC.Audio.clear();
     G.shake = 16;
     for (var i = 0; i < G.rocks.length; i++) {
@@ -157,6 +210,22 @@
       return;
     }
     if (G.hitstop > 0) { G.hitstop -= dt; return; }
+
+    /* constellation card: freeze the field, show the finished figure */
+    if (G.card) {
+      G.cardT += dt;
+      if (G.cardT > 3.2) {
+        G.card = null; G.cardT = 0;
+        if (G.constIdx + 1 >= CONSTELLATIONS.length) {
+          G.state = 'complete';
+          if (G.score > G.best) { G.best = G.score; try { localStorage.setItem('starchart.best', String(G.best)); } catch (e) {} }
+          SC.Audio.clear();
+        } else {
+          startConstellation(G.constIdx + 1);
+        }
+      }
+      return;
+    }
 
     /* slow motion */
     var wantSlow = G.slow.active && G.slow.energy > 0 && G.slow.lock <= 0;
@@ -186,7 +255,6 @@
     s.x = SC.clamp(s.x, 70, W - 70); s.y = SC.clamp(s.y, 150, H - 110);
     s.tilt += (SC.clamp(s.vx / 900, -1, 1) * 0.32 - s.tilt) * Math.min(1, dt * 12);
     s.invuln = Math.max(0, s.invuln - dt);
-    G.trailPts.length && 0;
     if (G.comboPop > 0) G.comboPop = Math.max(0, G.comboPop - dt * 4);
 
     /* combo decay */
@@ -200,8 +268,6 @@
       if (Math.random() < 0.25 && G.wave >= 3) spawnRock(null, -140, rand(58, 82));
       G.spawnT = interval * (0.75 + Math.random() * 0.5);
     }
-    G.starT -= sdt;
-    if (G.starT <= 0 && G.stars.length < 4) { spawnStar(); G.starT = 0.9 + Math.random() * 0.7; }
 
     /* rocks */
     for (var i = G.rocks.length - 1; i >= 0; i--) {
@@ -216,12 +282,10 @@
       }
     }
 
-    /* stars */
-    for (var j = G.stars.length - 1; j >= 0; j--) {
-      var st = G.stars[j];
-      st.phase += sdt * 3.4;
-      if (SC.dist2(s.x, s.y, st.x, st.y) < Math.pow(46, 2)) collectStar(j);
-    }
+    /* constellation stars: only the next one in the drawing order is collectable */
+    for (var j = 0; j < G.stars.length; j++) G.stars[j].phase += sdt * 3.4;
+    var act = G.stars[G.next];
+    if (act && SC.dist2(s.x, s.y, act.x, act.y) < Math.pow(50, 2)) collectStar();
 
     /* particles */
     for (var p = G.parts.length - 1; p >= 0; p--) {
@@ -237,13 +301,6 @@
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 46);
     if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
 
-    /* waves */
-    G.waveTimer += sdt;
-    if (G.waveTimer >= 22) {
-      G.waveTimer = 0; G.wave++;
-      banner('第 ' + G.wave + ' 波', '墨陨更密了');
-      SC.Audio.wave();
-    }
     G.shownScore += (G.score - G.shownScore) * Math.min(1, dt * 10);
   }
 
@@ -300,36 +357,42 @@
   }
 
   function drawChart(g) {
-    /* completed constellations */
+    var c = CONSTELLATIONS[G.constIdx];
+    var st = G.stars;
+    if (!st.length) return;
     g.save();
-    g.lineWidth = 5;
     g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    /* drawn segments */
     g.strokeStyle = C.accent2;
-    for (var c = 0; c < G.chart.length; c++) {
-      var pts = G.chart[c];
+    g.lineWidth = 5;
+    for (var i = 0; i < G.next - 1; i++) {
       g.beginPath();
-      for (var i = 0; i < pts.length; i++) { i ? g.lineTo(pts[i].x, pts[i].y) : g.moveTo(pts[i].x, pts[i].y); }
-      if (pts.length > 2) g.closePath();
+      g.moveTo(st[i].x, st[i].y);
+      g.lineTo(st[i + 1].x, st[i + 1].y);
       g.stroke();
-      for (var k = 0; k < pts.length; k++) {
-        g.beginPath(); g.arc(pts[k].x, pts[k].y, 7, 0, SC.TAU);
-        g.fillStyle = C.accent2; g.fill();
-        g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke(); g.lineWidth = 5;
+    }
+    /* extra edges of the figure appear once the constellation is closed */
+    if (G.card) {
+      for (var e = 0; e < c.extra.length; e++) {
+        var a = st[c.extra[e][0]], b = st[c.extra[e][1]];
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
       }
     }
-    /* live constellation */
-    if (G.trailPts.length) {
-      g.setLineDash([12, 10]);
-      g.strokeStyle = 'rgba(29,78,137,0.55)';
-      g.lineWidth = 4;
-      g.beginPath();
-      for (var j = 0; j < G.trailPts.length; j++) { j ? g.lineTo(G.trailPts[j].x, G.trailPts[j].y) : g.moveTo(G.trailPts[j].x, G.trailPts[j].y); }
-      g.stroke();
+    /* dotted guide to the next star in the drawing order */
+    if (G.next < st.length) {
+      var nxt = st[G.next], prev = G.next > 0 ? st[G.next - 1] : null;
+      g.save();
+      g.setLineDash([10, 12]);
+      g.strokeStyle = 'rgba(29,78,137,0.5)';
+      g.lineWidth = 3;
+      if (prev) { g.beginPath(); g.moveTo(prev.x, prev.y); g.lineTo(nxt.x, nxt.y); g.stroke(); }
       g.setLineDash([]);
-      for (var m = 0; m < G.trailPts.length; m++) {
-        g.beginPath(); g.arc(G.trailPts[m].x, G.trailPts[m].y, 4, 0, SC.TAU);
-        g.fillStyle = 'rgba(29,78,137,0.6)'; g.fill();
-      }
+      g.strokeStyle = 'rgba(216,64,46,0.55)';
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(nxt.x, nxt.y, 42, 0, SC.TAU); g.stroke();
+      g.restore();
     }
     g.restore();
   }
@@ -337,18 +400,37 @@
   function drawStars(g) {
     for (var i = 0; i < G.stars.length; i++) {
       var st = G.stars[i];
-      var pulse = 1 + Math.sin(st.phase) * 0.14;
-      var r = 26 * pulse;
-      g.save();
-      g.globalAlpha = 0.85;
-      var oa = st.phase * 0.7;
-      g.beginPath();
-      g.arc(st.x + Math.cos(oa) * r * 1.85, st.y + Math.sin(oa) * r * 1.85, 4.5, 0, SC.TAU);
-      g.fillStyle = C.accent2; g.fill();
-      g.restore();
-      SC.star4(g, st.x, st.y, r, st.phase * 0.1, C.accent, 4);
-      g.beginPath(); g.arc(st.x, st.y, r * 0.2, 0, SC.TAU);
-      g.fillStyle = C.surface; g.fill();
+      if (st.order < G.next) {
+        /* lit node of the figure */
+        g.save();
+        g.beginPath(); g.arc(st.x, st.y, 10, 0, SC.TAU);
+        g.fillStyle = C.accent2; g.fill();
+        g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke();
+        g.beginPath(); g.arc(st.x, st.y, 3.4, 0, SC.TAU);
+        g.fillStyle = C.surface; g.fill();
+        g.restore();
+      } else if (st.order === G.next) {
+        /* the next star to touch */
+        var pulse = 1 + Math.sin(st.phase) * 0.12;
+        var r = 26 * pulse;
+        g.save();
+        g.beginPath(); g.arc(st.x + Math.cos(st.phase * 0.7) * r * 1.7, st.y + Math.sin(st.phase * 0.7) * r * 1.7, 4.5, 0, SC.TAU);
+        g.fillStyle = C.accent2; g.fill();
+        g.restore();
+        SC.star4(g, st.x, st.y, r, st.phase * 0.1, C.accent, 4);
+        g.beginPath(); g.arc(st.x, st.y, r * 0.2, 0, SC.TAU);
+        g.fillStyle = C.surface; g.fill();
+        SC.comicText(g, (st.order + 1) + '/' + G.stars.length, st.x, st.y - 44, { size: 20, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
+      } else {
+        /* not yet reachable: a faint ink dot keeps the shape readable */
+        g.save();
+        g.globalAlpha = 0.5;
+        g.beginPath(); g.arc(st.x, st.y, 7, 0, SC.TAU);
+        g.fillStyle = C.sub; g.fill();
+        g.globalAlpha = 0.7;
+        g.lineWidth = 2; g.strokeStyle = C.ink; g.stroke();
+        g.restore();
+      }
     }
   }
 
@@ -542,14 +624,33 @@
   }
 
   function drawHUD(g) {
-    /* caption: width follows the text so the right edge is not hollow */
+    /* caption: current chapter and constellation */
+    var cur = CONSTELLATIONS[G.constIdx];
     g.save();
     g.font = SC.font(32, 900);
-    var capW = Math.max(300, g.measureText('星图 · 第 ' + G.wave + ' 波').width + 56);
+    var capW = Math.max(320, g.measureText('第 ' + (G.constIdx + 1) + ' 章 · ' + cur.name).width + 56);
     g.restore();
     SC.panel(g, 64, 56, capW, 96, { sx: 8, sy: 8, lw: 5 });
-    SC.comicText(g, '星图 · 第 ' + G.wave + ' 波', 88, 104, { size: 32, color: C.ink, lineWidth: 0, ghost: false });
-    SC.comicText(g, 'STAR CHART / 第一话', 88, 136, { size: 18, color: C.sub, lineWidth: 0, ghost: false });
+    SC.comicText(g, '第 ' + (G.constIdx + 1) + ' 章 · ' + cur.name, 88, 104, { size: 32, color: C.ink, lineWidth: 0, ghost: false });
+    SC.comicText(g, cur.latin + ' · ' + cur.dates, 88, 136, { size: 18, color: C.sub, lineWidth: 0, ghost: false });
+
+    /* twelve zodian slots */
+    var dx0 = W / 2 - 143, dy = 100;
+    for (var dz = 0; dz < 12; dz++) {
+      var dx = dx0 + dz * 26;
+      g.save();
+      g.beginPath(); g.arc(dx, dy, 8, 0, SC.TAU);
+      if (dz < G.done.length || (G.card && dz === G.done.length - 1 && G.done[dz] === G.constIdx)) {
+        g.fillStyle = C.accent2; g.fill();
+      } else if (dz === G.constIdx) {
+        g.fillStyle = C.accent; g.fill();
+      } else {
+        g.fillStyle = C.surface; g.fill();
+      }
+      g.lineWidth = 2.5; g.strokeStyle = C.ink; g.stroke();
+      g.restore();
+    }
+    SC.comicText(g, '黄道十二宫 ' + G.done.length + '/12', W / 2, dy + 36, { size: 16, color: C.sub, align: 'center', outline: false, ghost: false });
 
     /* score */
     SC.panel(g, W - 470, 56, 406, 136, { sx: 8, sy: 8, lw: 5 });
@@ -582,6 +683,19 @@
       g.restore();
     }
     SC.comicText(g, '生命', 84, 1022, { size: 18, color: C.sub, outline: false, ghost: false });
+    /* shields earned by perfect constellations */
+    for (var sh = 0; sh < 2; sh++) {
+      var sx2 = 300 + sh * 46;
+      g.save();
+      g.translate(sx2, 978);
+      g.beginPath();
+      g.moveTo(0, -18); g.lineTo(15, -10); g.lineTo(15, 6); g.lineTo(0, 20); g.lineTo(-15, 6); g.lineTo(-15, -10);
+      g.closePath();
+      if (sh < G.shields) { g.fillStyle = C.accent2; g.fill(); }
+      g.lineWidth = 3; g.strokeStyle = C.ink; g.stroke();
+      g.restore();
+    }
+    SC.comicText(g, '护盾', 288, 1022, { size: 18, color: C.sub, outline: false, ghost: false });
 
     /* slow meter */
     var mx = W / 2 - 240, my = 966, mw = 480, mh = 40;
@@ -698,7 +812,7 @@
     g.beginPath(); g.moveTo(110, 540); g.lineTo(640, 540); g.stroke();
     g.restore();
     SC.comicText(g, '在陨落之前，点亮一整页星图', 110, 592, { size: 30, color: C.sub, outline: false, ghost: false });
-    SC.comicText(g, '躲开墨陨 · 收集星点 · 集满七颗连成星座', 110, 636, { size: 21, color: C.accent2, outline: false, ghost: false });
+    SC.comicText(g, '按顺序点亮星点 · 把黄道十二宫一页连完', 110, 636, { size: 21, color: C.accent2, outline: false, ghost: false });
 
     /* start button: printed panel, not a burst blob */
     var pulse = 1 + Math.sin(t * 3.2) * 0.02;
@@ -744,7 +858,7 @@
     g.restore();
 
     SC.comicText(g, '本话完', W / 2, py + 150, { size: 104, color: C.ink, align: 'center', lineWidth: 6 });
-    SC.comicText(g, '第 ' + G.wave + ' 波 · 点亮 ' + G.chart.length + ' 条星座', W / 2, py + 202, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
+    SC.comicText(g, '点亮 ' + G.done.length + ' / 12 个星座 · 止步在' + CONSTELLATIONS[G.constIdx].name, W / 2, py + 202, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
 
     g.save();
     g.strokeStyle = 'rgba(20,19,16,0.35)'; g.lineWidth = 2;
@@ -779,6 +893,133 @@
     SC.comicText(g, '按 P 继续 · 空格 缓速', W / 2, H / 2 + 56, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
   }
 
+  /* ---------------- constellation card / final gallery ---------------- */
+  function figurePoints(c, x, y, w, h) {
+    var minx = 1, maxx = 0, miny = 1, maxy = 0, i;
+    for (i = 0; i < c.stars.length; i++) {
+      minx = Math.min(minx, c.stars[i][0]); maxx = Math.max(maxx, c.stars[i][0]);
+      miny = Math.min(miny, c.stars[i][1]); maxy = Math.max(maxy, c.stars[i][1]);
+    }
+    var spanX = Math.max(0.001, maxx - minx), spanY = Math.max(0.001, maxy - miny);
+    var s = Math.min(w / spanX, h / spanY);
+    var ox = x + (w - spanX * s) / 2, oy = y + (h - spanY * s) / 2;
+    var out = [];
+    for (i = 0; i < c.stars.length; i++) out.push({ x: ox + (c.stars[i][0] - minx) * s, y: oy + (c.stars[i][1] - miny) * s });
+    return out;
+  }
+
+  function drawFigure(g, c, x, y, w, h, nodeR, withExtra) {
+    var pts = figurePoints(c, x, y, w, h);
+    g.save();
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = C.accent2; g.lineWidth = Math.max(2, nodeR * 0.36);
+    g.beginPath();
+    for (var i = 0; i < pts.length; i++) { i ? g.lineTo(pts[i].x, pts[i].y) : g.moveTo(pts[i].x, pts[i].y); }
+    g.stroke();
+    if (withExtra !== false) {
+      for (var e = 0; e < c.extra.length; e++) {
+        var a = pts[c.extra[e][0]], b = pts[c.extra[e][1]];
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+      }
+    }
+    for (var k = 0; k < pts.length; k++) {
+      g.beginPath(); g.arc(pts[k].x, pts[k].y, nodeR, 0, SC.TAU);
+      g.fillStyle = C.accent2; g.fill();
+      g.lineWidth = Math.max(2, nodeR * 0.3); g.strokeStyle = C.ink; g.stroke();
+    }
+    g.restore();
+  }
+
+  function drawCard(g) {
+    var c = CONSTELLATIONS[G.card.idx];
+    var k = Math.min(1, G.cardT / 0.4);
+    var ease = SC.expoOut(k);
+    g.save();
+    g.globalAlpha = 0.9 * ease;
+    g.fillStyle = C.bg;
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.05 * ease;
+    g.fillStyle = SC.halftone(g, C.ink, 0.3, 12);
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = ease;
+
+    var pw = 900, ph = 540, px = (W - pw) / 2, py = (H - ph) / 2;
+    var sc = 0.94 + 0.06 * ease;
+    g.translate(W / 2, H / 2); g.scale(sc, sc); g.translate(-W / 2, -H / 2);
+    SC.panel(g, px, py, pw, ph, { sx: 14, sy: 14, lw: 8 });
+
+    SC.comicText(g, '第 ' + (G.card.idx + 1) + ' 章', px + 52, py + 66, { size: 24, color: C.sub, outline: false, ghost: false });
+
+    /* the finished figure */
+    var bx = px + 48, by = py + 96, bw = 380, bh = 336;
+    drawFigure(g, c, bx, by, bw, bh, 7, true);
+
+    /* name block */
+    var tx = px + pw - 56;
+    SC.comicText(g, c.name, tx, py + 152, { size: 66, color: C.ink, align: 'right', lineWidth: 0 });
+    SC.comicText(g, c.latin, tx, py + 196, { size: 24, color: C.accent2, align: 'right', lineWidth: 0 });
+    SC.comicText(g, c.dates, tx, py + 234, { size: 22, color: C.sub, align: 'right', outline: false, ghost: false });
+    g.save();
+    g.strokeStyle = 'rgba(20,19,16,0.3)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(px + 500, py + 262); g.lineTo(tx, py + 262); g.stroke();
+    g.restore();
+    SC.comicText(g, c.myth, tx, py + 306, { size: 26, color: C.ink, align: 'right', outline: false, ghost: false });
+    SC.comicText(g, '+' + (120 + (G.card.perfect ? 120 : 0)), tx, py + 344, { size: 30, color: C.accent, align: 'right', lineWidth: 0, ghost: false });
+
+    if (G.card.perfect) {
+      SC.panel(g, px + 500, py + 372, 344, 58, { lw: 4, fill: C.accent2, sx: 6, sy: 6 });
+      SC.comicText(g, '完美 · 护盾 +1', px + 672, py + 412, { size: 25, color: C.surface, align: 'center', lineWidth: 0, ghost: false });
+    } else {
+      SC.comicText(g, '护盾未获得', px + 672, py + 406, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
+    }
+
+    /* auto-advance bar */
+    var barW = pw - 112, barH = 8, barY = py + ph - 28;
+    g.fillStyle = 'rgba(20,19,16,0.16)';
+    g.fillRect(px + 56, barY, barW, barH);
+    g.fillStyle = C.accent;
+    g.fillRect(px + 56, barY, barW * SC.clamp(G.cardT / 3.2, 0, 1), barH);
+    g.restore();
+  }
+
+  function drawComplete(g) {
+    g.save();
+    g.globalAlpha = 0.92;
+    g.fillStyle = C.bg;
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.1;
+    g.fillStyle = SC.halftone(g, C.ink, 0.3, 12);
+    g.fillRect(0, 0, W, H);
+    g.restore();
+
+    SC.comicText(g, '十二星座集齐', W / 2, 150, { size: 68, color: C.ink, align: 'center', lineWidth: 0 });
+    SC.comicText(g, '一整页星图，被你连完了', W / 2, 200, { size: 24, color: C.sub, align: 'center', outline: false, ghost: false });
+
+    var cols = 4, rows = 3, cellW = 322, cellH = 166, gapX = 22, gapY = 18;
+    var gridW = cols * cellW + (cols - 1) * gapX;
+    var gx0 = (W - gridW) / 2, gy0 = 232;
+    for (var i = 0; i < 12; i++) {
+      var cx = gx0 + (i % cols) * (cellW + gapX);
+      var cy = gy0 + Math.floor(i / cols) * (cellH + gapY);
+      g.save();
+      SC.panel(g, cx, cy, cellW, cellH, { sx: 6, sy: 6, lw: 4 });
+      drawFigure(g, CONSTELLATIONS[i], cx + 24, cy + 16, cellW - 48, 96, 3.6, true);
+      SC.comicText(g, CONSTELLATIONS[i].name, cx + cellW / 2, cy + 146, { size: 22, color: C.ink, align: 'center', lineWidth: 0, ghost: false });
+      g.restore();
+    }
+
+    SC.comicText(g, '得分 ' + G.score, W / 2 - 210, 1002, { size: 34, color: C.accent, align: 'center', lineWidth: 0 });
+    SC.comicText(g, '最高 ' + G.best, W / 2 + 210, 1002, { size: 34, color: C.ink, align: 'center', lineWidth: 0 });
+
+    var pulse = 1 + Math.sin(G.t * 3.2) * 0.03;
+    g.save();
+    g.translate(W / 2, 872);
+    g.scale(pulse, pulse);
+    SC.panel(g, -220, -40, 440, 80, { lw: 6, fill: C.accent, sx: 8, sy: 8 });
+    SC.comicText(g, '再连一遍', 0, 10, { size: 36, color: C.surface, align: 'center', lineWidth: 0, ghost: false });
+    g.restore();
+  }
+
   /* ---------------- render ---------------- */
   function render() {
     if (!ctx) return;
@@ -790,11 +1031,14 @@
     ctx.scale(view.scale, view.scale);
 
     drawPaper(ctx);
-    if (G.state !== 'title') drawChart(ctx);
-    if (G.state === 'title') {
+    if (G.state === 'complete') {
+      drawFrame(ctx);
+      drawComplete(ctx);
+    } else if (G.state === 'title') {
       drawFrame(ctx);
       drawTitle(ctx);
     } else {
+      drawChart(ctx);
       drawStars(ctx);
       drawRocks(ctx);
       drawParts(ctx);
@@ -803,6 +1047,7 @@
       drawFrame(ctx);
       if (G.state !== 'over') { drawHUD(ctx); drawBanner(ctx); }
       if (G.state === 'over') drawOver(ctx);
+      if (G.card) drawCard(ctx);
       if (G.paused) drawPause(ctx);
     }
     drawSlowOverlay(ctx);
@@ -838,7 +1083,8 @@
       pointers[e.pointerId] = true;
       if (Object.keys(pointers).length >= 2 && G.state === 'play') G.slow.active = true;
       if (e.button === 2) { if (G.state === 'play') G.slow.active = true; return; }
-      if (G.state === 'title' || G.state === 'over') { startGame(); return; }
+      if (G.state === 'title' || G.state === 'over' || G.state === 'complete') { startGame(); return; }
+      if (G.card) { G.cardT = 3.2; return; }
       if (G.state === 'play') { var p = toLogical(e.clientX, e.clientY); G.target.x = p.x; G.target.y = p.y; }
     });
     canvas.addEventListener('pointerup', function (e) {
@@ -856,7 +1102,7 @@
       if (e.code === 'Space') {
         e.preventDefault();
         if (G.state === 'play') G.slow.active = true;
-        else if (G.state === 'title' || G.state === 'over') startGame();
+        else if (G.state === 'title' || G.state === 'over' || G.state === 'complete') startGame();
       }
       if (e.code === 'KeyP' && G.state === 'play') G.paused = !G.paused;
       if (e.code === 'KeyM') { SC.Audio.setMuted(!SC.Audio.muted); }
@@ -880,43 +1126,65 @@
     var base = makeState();
     base.state = 'play';
     base.best = 5120;
-    base.score = 1240;
-    base.shownScore = 1240;
-    base.wave = 3;
-    base.lives = 2;
-    base.combo = 5;
-    base.comboTimer = 1.8;
+    base.lives = 3;
+    base.shields = 1;
+    base.score = 1240; base.shownScore = 1240;
+    base.combo = 5; base.comboTimer = 1.8;
     base.slow.energy = 0.62;
-    base.ship.x = 900; base.ship.y = 760;
-    base.target.x = 900; base.target.y = 760;
-    var rocks = [
-      [430, 380, 50], [820, 250, 34], [1180, 400, 44], [1440, 640, 54], [1330, 300, 36], [650, 640, 42]
-    ];
+    base.ship.x = 900; base.ship.y = 800;
+    base.target.x = 900; base.target.y = 800;
+
+    var rocks = [[430, 380, 50], [820, 250, 34], [1180, 400, 44], [1440, 640, 54], [1330, 300, 36], [650, 660, 42]];
     rocks.forEach(function (r, i) { base.rocks.push({ x: r[0], y: r[1], vx: 10, vy: 200, r: r[2], rot: i * 0.7, vr: 0.4, seed: 30 + i * 7, dead: false }); });
-    base.stars.push({ x: 1040, y: 420, phase: 0.4, seed: 1 }, { x: 700, y: 640, phase: 1.7, seed: 2 }, { x: 1320, y: 740, phase: 2.9, seed: 3 });
-    base.trailPts = [{ x: 1120, y: 600 }, { x: 1210, y: 660 }, { x: 1300, y: 590 }];
-    base.chart = [[{ x: 300, y: 760 }, { x: 420, y: 820 }, { x: 560, y: 770 }, { x: 520, y: 900 }]];
+
     var prng = SC.rngFrom(77);
     for (var i = 0; i < 22; i++) {
       var pa = prng() * SC.TAU, pd = 30 + prng() * 130;
-      base.parts.push({ x: 900 + Math.cos(pa) * pd, y: 760 + Math.sin(pa) * pd, vx: Math.cos(pa) * 1.5, vy: Math.sin(pa) * 1.5, life: 0.5 + prng() * 0.35, max: 0.85, size: 5 + prng() * 9, color: i % 3 ? C.accent : C.ink, shape: 'dot', rot: pa, vr: 0.6 });
+      base.parts.push({ x: 900 + Math.cos(pa) * pd, y: 800 + Math.sin(pa) * pd, vx: Math.cos(pa) * 1.5, vy: Math.sin(pa) * 1.5, life: 0.5 + prng() * 0.35, max: 0.85, size: 5 + prng() * 9, color: i % 3 ? C.accent : C.ink, shape: 'dot', rot: pa, vr: 0.6 });
     }
-    base.banner = { text: '第 3 波', sub: '墨陨更密了', life: 1.4, max: 1.9 };
+
+    /* default scene: chapter 5, Leo, four stars already drawn */
+    base.constIdx = 4; base.wave = 5;
+    base.stars = projectConstellation(CONSTELLATIONS[4]);
+    base.next = 4;
+    for (var k = 0; k < base.next; k++) base.stars[k].lit = true;
+    base.done = [0, 1, 2, 3];
+    base.banner = { text: '第 5 章', sub: '狮子座 · 7.23 – 8.22', life: 1.4, max: 1.9 };
+
     if (name === 'hit') {
-      base.shake = 10; base.pops.push({ x: 900, y: 640, text: 'CRASH!', life: 0.7, max: 0.95, size: 64, color: C.accent });
+      base.shake = 10;
+      base.pops.push({ x: 900, y: 660, text: 'CRASH!', life: 0.7, max: 0.95, size: 64, color: C.surface, burst: true });
       base.combo = 0; base.ship.invuln = 0;
     }
-    if (name === 'clear') {
-      base.score = 2480; base.shownScore = 2480;
-      base.pops.push({ x: W / 2, y: 470, text: '星座完成', life: 0.6, max: 0.95, size: 92, color: C.surface, burst: true });
+    if (name === 'card') {
+      base.constIdx = 7; base.wave = 8;
+      base.stars = projectConstellation(CONSTELLATIONS[7]);
+      base.next = base.stars.length;
+      base.stars.forEach(function (s) { s.lit = true; });
+      base.done = [0, 1, 2, 3, 4, 5, 6];
+      base.card = { idx: 7, t: 1.5, perfect: true };
+      base.cardT = 1.5;
       base.banner = null;
-      base.parts.push({ ring: true, x: W / 2, y: H / 2, r0: 60, life: 0.8, max: 0.9, color: C.accent2 });
-      base.parts.push({ ring: true, x: W / 2, y: H / 2, r0: 180, life: 0.8, max: 0.9, color: C.accent2 });
+      base.score = 2680; base.shownScore = 2680;
+    }
+    if (name === 'complete') {
+      base.state = 'complete';
+      base.done = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      base.score = 6840; base.shownScore = 6840;
+      base.best = 5120;
     }
     if (name === 'title') { base.state = 'title'; }
     if (name === 'pause') { base.paused = true; }
     if (name === 'slow') { base.timeScale = 0.35; base.slow.active = true; base.slow.energy = 0.55; base.banner = null; }
-    if (name === 'over') { base.state = 'over'; base.score = 3820; base.shownScore = 3820; base.best = 5120; }
+    if (name === 'over') {
+      base.state = 'over';
+      base.score = 3820; base.shownScore = 3820; base.best = 5120;
+      base.done = [0, 1, 2];
+      base.constIdx = 3;
+      base.stars = projectConstellation(CONSTELLATIONS[3]);
+      base.next = 2;
+      base.stars[0].lit = true; base.stars[1].lit = true;
+    }
     G = base;
   }
 
